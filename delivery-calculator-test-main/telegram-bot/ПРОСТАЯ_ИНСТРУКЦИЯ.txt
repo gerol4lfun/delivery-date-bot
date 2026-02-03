@@ -1,0 +1,62 @@
+╔══════════════════════════════════════════════════════════════╗
+║  ПРОСТАЯ ИНСТРУКЦИЯ - Запуск бота на Railway.app            ║
+╚══════════════════════════════════════════════════════════════╝
+
+ШАГ 1: Создать файл .env
+─────────────────────────
+1. Откройте папку telegram-bot
+2. Создайте новый файл с именем: .env
+3. Вставьте туда:
+
+TELEGRAM_BOT_TOKEN=8209732839:AAGRAknOBp1qPQa9GuEQj0HiZwrmF5ReWgs
+SUPABASE_URL=https://dyoibmfdohpvjltfaygr.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5b2libWZkb2hwdmpsdGZheWdyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzk4MDEzNywiZXhwIjoyMDQ5NTU2MTM3fQ.OvsAUbNIujaeUvnj4-sLvZXFopYVJ0rBgkEL4SYBXPc
+
+4. Сохраните
+
+
+ШАГ 2: Зарегистрироваться на Railway
+──────────────────────────────────────
+1. Откройте: https://railway.app
+2. Нажмите "Login with GitHub"
+3. Разрешите доступ
+
+
+ШАГ 3: Создать проект
+──────────────────────
+1. Нажмите "+ New Project"
+2. Выберите "Deploy from GitHub repo"
+3. Выберите ваш репозиторий (или загрузите код на GitHub сначала)
+
+
+ШАГ 4: Настроить переменные
+─────────────────────────────
+1. Откройте созданный проект
+2. Перейдите в "Variables"
+3. Добавьте 3 переменные:
+
+   TELEGRAM_BOT_TOKEN = 8209732839:AAGRAknOBp1qPQa9GuEQj0HiZwrmF5ReWgs
+   SUPABASE_URL = https://dyoibmfdohpvjltfaygr.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5b2libWZkb2hwdmpsdGZheWdyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzk4MDEzNywiZXhwIjoyMDQ5NTU2MTM3fQ.OvsAUbNIujaeUvnj4-sLvZXFopYVJ0rBgkEL4SYBXPc
+
+
+ШАГ 5: Настроить запуск
+────────────────────────
+1. Перейдите в "Settings"
+2. Root Directory: telegram-bot
+3. Start Command: npm start
+4. Сохраните
+
+
+ШАГ 6: Проверить
+────────────────
+1. Дождитесь деплоя (2-3 минуты)
+2. Откройте Telegram
+3. Найдите вашего бота
+4. Отправьте: /start
+5. Если бот ответил - ВСЁ РАБОТАЕТ! ✅
+
+
+═══════════════════════════════════════════════════════════════
+
+Если что-то не понятно - напишите мне, на каком шаге застряли!
