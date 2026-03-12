@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Калькулятор доставки и стоимости теплиц</title>
+  
+  <!-- Яндекс.Карты -->
+  <script src="https://api-maps.yandex.ru/2.1/?apikey=a6150be2-d00e-4551-b9f9-2a4f8118d04d&lang=ru_RU" type="text/javascript"></script>
+  <!-- Supabase JavaScript SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.28.0/dist/umd/supabase.min.js"></script>
+  
+  <link rel="stylesheet" href="css/styles.css?v=49">
+</head>
+<body>
+  <!-- Авторизация -->
+  <div class="auth-container" id="auth-container">
+    <h2>Вход в систему</h2>
+    <input type="text" id="login" placeholder="Введите логин" required>
+    <input type="password" id="password" placeholder="Введите пароль" required>
+    <button onclick="authenticate()">Войти</button>
+    <p id="auth-error">Неверный логин или пароль!</p>
+  </div>
+
+  <!-- Калькулятор -->
+  <div class="calculator-container hidden" id="calculator-container">
+    <button class="logout" onclick="logout()">Выйти</button>
+    <button class="admin-button hidden" id="admin-button" onclick="toggleAdminPanel()">Админ-панель</button>
+    <div class="container">
+      
+      <!-- Админ-панель для управления паролями -->
+      <div class="admin-panel hidden" id="admin-panel">
+        <h2>Управление паролями</h2>
+        <div class="admin-content">
+          <p class="admin-info">Выберите пользователя и введите новый пароль. После изменения пароля все пользователи будут разлогинены.</p>
+          
+          <div class="admin-form">
+            <label for="admin-user-select">Пользователь:</label>
+            <select id="admin-user-select">
+              <option value="" disabled selected>Выберите пользователя</option>
+            </select>
+            
+            <label for="admin-new-password">Новый пароль:</label>
+            <input type="password" id="admin-new-password" placeholder="Введите новый пароль">
+            
+            <label for="admin-confirm-password">Подтвердите пароль:</label>
+            <input type="password" id="admin-confirm-password" placeholder="Подтвердите пароль">
+            
+            <div class="btn-group">
+              <button class="blue-button" onclick="changeUserPassword()">Изменить пароль</button>
+              <button class="reset-button" onclick="toggleAdminPanel()">Закрыть</button>
+            </div>
+            
+            <div id="admin-message" class="admin-message"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Блок доставки -->
+      <div class="block">
+        <div class="block-header">
+          <h2>Доставка</h2>
+          <button class="delivery-dates-button" onclick="showDeliveryDatesModal()" title="Актуальные даты доставки">
+            <span class="calendar-icon">📅</span>
+            <span class="button-text">Даты доставки</span>
+          </button>
+        </div>
+        <label for="address">Введите адрес доставки:</label>
+        <div class="address-container">
+          <input type="text" id="address" placeholder="Например, Санкт-Петербург, Невский пр." required autocomplete="off">
+          <div id="suggestions"></div>
+        </div>
+        
+        <div class="delivery-options">
+          <label>
+            <input type="radio" name="deliveryType" value="withoutAssembly" checked>
+            <span>Без сборки</span>
+          </label>
+          <label>
+            <input type="radio" name="deliveryType" value="withAssembly">
+            <span>Со сборкой</span>
+          </label>
+        </div>
+        
+        <div class="btn-group">
+          <!-- Синяя кнопка для доставки -->
+          <button class="blue-button" onclick="calculateDelivery()">Рассчитать доставку</button>
+          <!-- Красная кнопка для сброса доставки -->
+          <button class="reset-delivery-button" onclick="resetDelivery()">Сбросить доставку</button>
+        </div>
+        
+        <div id="result"></div>
+        <div id="map"></div>
+      </div>
+
+      <!-- Блок стоимости теплицы -->
+      <div class="block">
+        <h2>Стоимость теплицы</h2>
+
+        <div class="parameters">
+          <label for="city">Город:</label>
+          <select id="city" onchange="onCityChange()">
+            <option value="" disabled selected>Выберите город</option>
+          </select>
+        </div>
+        <div class="parameters">
+          <label for="form">Форма теплицы:</label>
+          <select id="form" onchange="onFormChange()">
+            <option value="" disabled selected>Сначала выберите город</option>
+          </select>
+        </div>
+        <div class="parameters">
+          <label for="width">Ширина (м):</label>
+          <select id="width" onchange="onWidthChange()">
+            <option value="" disabled selected>Выберите ширину</option>
+          </select>
+        </div>
+        <div class="parameters">
+          <label for="length">Длина (м):</label>
+          <select id="length" onchange="onLengthChange()">
+            <option value="" disabled selected>Выберите длину</option>
+          </select>
+        </div>
+        <div class="parameters">
+          <label for="frame">Каркас:</label>
+          <select id="frame" onchange="onFrameChange()">
+            <option value="" disabled selected>Выберите каркас</option>
+          </select>
+        </div>
+        <div class="parameters">
+          <label for="polycarbonate">Поликарбонат:</label>
+          <select id="polycarbonate" onchange="calculateGreenhouseCost()">
+            <option value="" disabled selected>Выберите поликарбонат</option>
+            <!-- Опции добавятся через JavaScript -->
+          </select>
+        </div>
+        <div class="parameters">
+          <label for="arcStep">Шаг между дугами:</label>
+          <select id="arcStep" onchange="calculateGreenhouseCost()">
+            <option value="1" selected>1 м</option>
+            <option value="0.65">0.65 м</option>
+          </select>
+        </div>
+        
+        <!-- Горизонтальная группа для чекбоксов "Брус, Сборка, Штыри" -->
+        <div class="additional-services">
+          <div class="checkbox-group-small">
+            <label>
+              <input type="checkbox" id="bracing" onchange="calculateGreenhouseCost()">
+              <span>Брус</span>
+            </label>
+            <label>
+              <input type="checkbox" id="assembly" onchange="calculateGreenhouseCost()">
+              <span>Сборка</span>
+            </label>
+            <label>
+              <input type="checkbox" id="ground-hooks" onchange="calculateGreenhouseCost()">
+              <span>Штыри</span>
+            </label>
+          </div>
+        </div>
+        
+        <!-- Здесь перемещаем кнопки для расчёта и сброса стоимости теплицы -->
+        <div class="btn-group">
+          <!-- Синяя кнопка для стоимости теплицы -->
+          <button class="blue-button" onclick="calculateGreenhouseCost()">Рассчитать стоимость теплицы</button>
+          <!-- Красная кнопка для сброса фильтров -->
+          <button class="reset-button" onclick="resetAllFilters()">Сбросить все фильтры</button>
+        </div>
+        
+        <!-- Блок "Монтаж на фундамент клиента" -->
+<p class="centered-heading"><strong>Монтаж на фундамент клиента</strong></p>
+<!-- Вертикальная группа для чекбоксов монтажа -->
+<div class="checkbox-group-large">
+  <label>
+    <input type="checkbox" id="on-wood" data-price="1500" onchange="calculateGreenhouseCost()">
+    <span>На брус 1.500&nbsp;рублей</span>
+  </label>
+  <label>
+    <input type="checkbox" id="on-concrete" data-price="2000" onchange="calculateGreenhouseCost()">
+    <span>На бетон 2.000&nbsp;рублей</span>
+  </label>
+</div>
+        
+<div class="additional-products">
+  <h3>Дополнительные товары:</h3>
+
+  <!-- 1) Капельный полив механический -->
+  <div class="product-item">
+    <label class="product-label">
+      <!-- Выпадающий список вместо чекбокса -->
+      <select id="drip-irrigation-mech-qty" data-price="1690" onchange="calculateGreenhouseCost()">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      <span class="product-name">Капельный полив механический</span>
+      <span class="price">1.690 рублей</span>
+    </label>
+  </div>
+
+  <!-- 2) Капельный полив автоматический -->
+  <div class="product-item">
+    <label class="product-label">
+      <select id="drip-irrigation-auto-qty" data-price="4490" onchange="calculateGreenhouseCost()">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      <span class="product-name">Капельный полив автоматический</span>
+      <span class="price">4.490 рублей</span>
+    </label>
+  </div>
+
+  <!-- 3) Автомат для форточки -->
+  <div class="product-item">
+    <label class="product-label">
+      <select id="window-automation-qty" data-price="2590" onchange="calculateGreenhouseCost()">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      <span class="product-name">Автомат для форточки</span>
+      <span class="price">2.590 рублей</span>
+    </label>
+  </div>
+
+  <!-- 4) Дополнительная форточка -->
+  <div class="product-item">
+    <label class="product-label">
+      <select id="additional-window-qty" data-price="1490" onchange="calculateGreenhouseCost()">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      <span class="product-name">Дополнительная форточка</span>
+      <span class="price">1.490 рублей</span>
+    </label>
+  </div>
+
+  <!-- 5) Оцинкованная лента 30 м -->
+  <div class="product-item">
+    <label class="product-label">
+      <select id="galvanized-tape-30m-qty" data-price="1990" onchange="calculateGreenhouseCost()">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      <span class="product-name">Оцинкованная лента 30 м</span>
+      <span class="price">1.990 рублей</span>
+    </label>
+  </div>
+
+  <!-- 6) Паропропускная лента 25 м -->
+  <div class="product-item">
+    <label class="product-label">
+      <select id="vapor-permeable-tape-25m-qty" data-price="1590" onchange="calculateGreenhouseCost()">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      <span class="product-name">Паропропускная лента 25 м</span>
+      <span class="price">1.590 рублей</span>
+    </label>
+  </div>
+</div>
+
+      <!-- Блок1 коммерческого предложения -->
+      <div class="block">
+        <h2>Коммерческое предложение</h2>
+        
+        <!-- Вкладки -->
+        <div class="kp-tabs">
+          <div class="kp-tab active" onclick="setOfferTab('short')">Короткое КП</div>
+          <div class="kp-tab" onclick="setOfferTab('long')">Длинное КП</div>
+        </div>
+        
+        <!-- Панель для короткого КП -->
+        <div class="kp-panel" id="kp-panel-short">
+          <textarea id="commercial-offer-short" rows="20" readonly>Здесь будет ваше короткое КП.</textarea>
+        </div>
+        
+        <!-- Панель для длинного КП (скрыта по умолчанию) -->
+        <div class="kp-panel hidden" id="kp-panel-long">
+          <textarea id="commercial-offer" rows="20" readonly>Здесь будет ваше коммерческое предложение.</textarea>
+        </div>
+        
+        <div class="btn-group">
+          <button class="blue-button" onclick="copyCommercialOffer()">Скопировать КП</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/scripts.js?v=47"></script>
+  </div>
+
+  <!-- Модальное окно с датами доставки (вынесено за пределы calculator-container для корректного отображения) -->
+  <div class="delivery-dates-modal hidden" id="delivery-dates-modal">
+    <div class="delivery-dates-modal-content">
+      <div class="delivery-dates-modal-header">
+        <h2>📅 Актуальные даты доставки по городам</h2>
+        <button class="close-modal-button" onclick="closeDeliveryDatesModal()">×</button>
+      </div>
+      <div class="delivery-dates-modal-body">
+        <div id="delivery-dates-loading" style="text-align: center; padding: 20px;">
+          Загрузка данных...
+        </div>
+        <div id="delivery-dates-content" style="display: none;">
+          <input type="text" id="delivery-dates-search" placeholder="🔍 Поиск по городу..." style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+          <div id="delivery-dates-table-container" style="max-height: 500px; overflow-y: auto;">
+            <!-- Таблица будет добавлена через JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
