@@ -90,7 +90,14 @@ async function handleMessage(chatId, text, fromId) {
     const preview = formatParsedResults(parsedData);
     await b.sendMessage(chatId, preview + '\n\n⏳ Обновляю данные в Supabase...');
 
-    const results = await updateDeliveryDatesFetch(parsedData);
+    let results;
+    try {
+        results = await updateDeliveryDatesFetch(parsedData);
+        console.log('[webhook] Supabase upsert ok, rows:', results.total);
+    } catch (supabaseErr) {
+        console.error('[webhook] Supabase failed:', supabaseErr.message);
+        throw supabaseErr;
+    }
 
     let report = `✅ <b>Обновление завершено!</b>\n\n`;
     report += `📊 Всего обработано: ${results.total}\n`;
@@ -144,34 +151,71 @@ async function handleCommand(chatId, text) {
     }
 }
 
+function parseBody(body) {
+    if (body == null) return null;
+    if (typeof body === 'object') return body;
+    if (typeof body === 'string') {
+        try {
+            return JSON.parse(body);
+        } catch (e) {
+            console.error('[webhook] JSON.parse failed:', e.message);
+            return null;
+        }
+    }
+    return null;
+}
+
 module.exports = async (req, res) => {
+    console.log('[webhook] method:', req.method);
+
     if (req.method !== 'POST') {
         res.status(405).end();
         return;
     }
 
-    const update = req.body;
-    if (!update || !update.message) {
+    const update = parseBody(req.body);
+    if (!update) {
+        console.error('[webhook] body empty or parse failed');
+        res.status(200).end();
+        return;
+    }
+
+    const hasMessage = !!update?.message;
+    console.log('[webhook] update.message exists:', hasMessage);
+
+    if (!hasMessage) {
         res.status(200).end();
         return;
     }
 
     const { chat, text, from } = update.message;
-    const chatId = chat.id;
-    const fromId = from ? from.id : null;
+    const chatId = chat?.id;
+    const fromId = from?.id ?? null;
 
-    res.status(200).end(); // Сразу отвечаем Telegram, чтобы не было таймаута
+    console.log('[webhook] chatId:', chatId, 'fromId:', fromId, 'path:', text?.startsWith('/') ? 'command' : 'text');
+
+    if (!chatId) {
+        console.error('[webhook] chatId missing');
+        res.status(200).end();
+        return;
+    }
 
     try {
         if (text && text.startsWith('/')) {
             await handleCommand(chatId, text);
+            console.log('[webhook] command ok');
         } else if (text) {
             await handleMessage(chatId, text, fromId);
+            console.log('[webhook] message ok, Supabase updated');
         }
     } catch (err) {
-        console.error('Webhook error:', err);
+        console.error('[webhook] error:', err.message);
         try {
             await getBot().sendMessage(chatId, `❌ Ошибка: ${err.message}`);
-        } catch (_) {}
+        } catch (sendErr) {
+            console.error('[webhook] sendMessage failed:', sendErr.message);
+        }
     }
+
+    res.status(200).end();
 };
