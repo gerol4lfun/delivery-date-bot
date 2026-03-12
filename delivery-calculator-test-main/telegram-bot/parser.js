@@ -11,8 +11,8 @@ function parseDeliveryDates(text) {
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     const results = [];
 
-    // Поддержка: "Город с ДД.ММ", "Город с ДД.ММ (кроме X)" или "Город с ДД.ММ, кроме X, Y"
-    const pattern = /^(.+?)\s+с\s+(\d{1,2}\.\d{1,2})(?:\s*[,(]\s*кроме\s+([\d.,\s]+)\s*\)?)?$/i;
+    // Регулярное выражение для поиска: "Город с ДД.ММ" или "Город с ДД.ММ (кроме ДД, ДД)"
+    const pattern = /^(.+?)\s+с\s+(\d{1,2}\.\d{1,2})(?:\s*\(кроме\s+([\d,\s]+)\))?$/i;
 
     for (const line of lines) {
         const match = line.match(pattern);
