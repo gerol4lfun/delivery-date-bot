@@ -24,8 +24,10 @@ function initSupabase(url, serviceRoleKey) {
     return supabaseClient;
 }
 
+const UPDATE_TIMEOUT_MS = 30000; // 30 сек — не ждём бесконечно
+
 /**
- * Обновляет даты доставки в Supabase
+ * Обновляет даты доставки в Supabase (пакетный upsert — 1 запрос вместо 2×N)
  * @param {Array} deliveryData - Массив объектов {city, date, restrictions}
  * @returns {Promise<Object>} Результат обновления
  */
@@ -40,72 +42,75 @@ async function updateDeliveryDates(deliveryData) {
         total: deliveryData.length
     };
 
-    for (const item of deliveryData) {
+    // Готовим данные для пакетного upsert (1 запрос вместо 2×N)
+    const rows = deliveryData.map((item) => {
+        const row = {
+            city_name: item.city,
+            delivery_date: item.date,
+            updated_at: new Date().toISOString()
+        };
+        if (item.restrictions !== null) {
+            row.restrictions = item.restrictions;
+        }
+        return row;
+    });
+
+    const doUpdate = async () => {
         try {
-            // Проверяем, существует ли город
-            const { data: existing, error: checkError } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('delivery_dates')
-                .select('id, city_name')
-                .eq('city_name', item.city)
-                .single();
+                .upsert(rows, {
+                    onConflict: 'city_name',
+                    ignoreDuplicates: false
+                });
 
-            if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = not found
-                throw checkError;
+            if (error) {
+                throw error;
             }
 
-            const updateData = {
-                delivery_date: item.date,
-                updated_at: new Date().toISOString()
-            };
-
-            if (item.restrictions !== null) {
-                updateData.restrictions = item.restrictions;
-            }
-
-            if (existing) {
-                // Обновляем существующую запись
-                const { error: updateError } = await supabaseClient
-                    .from('delivery_dates')
-                    .update(updateData)
-                    .eq('city_name', item.city);
-
-                if (updateError) {
-                    throw updateError;
-                }
-
+            deliveryData.forEach((item) => {
                 results.success.push({
                     city: item.city,
                     action: 'updated',
                     date: item.date
                 });
-            } else {
-                // Создаем новую запись
-                const { error: insertError } = await supabaseClient
-                    .from('delivery_dates')
-                    .insert({
-                        city_name: item.city,
-                        ...updateData
-                    });
-
-                if (insertError) {
-                    throw insertError;
-                }
-
-                results.success.push({
-                    city: item.city,
-                    action: 'created',
-                    date: item.date
-                });
-            }
-        } catch (error) {
-            results.failed.push({
-                city: item.city,
-                error: error.message
             });
-        }
-    }
+        } catch (error) {
+            console.warn('Пакетный upsert не удался, пробуем по одному:', error.message);
+            for (const item of deliveryData) {
+                try {
+                    const row = {
+                        city_name: item.city,
+                        delivery_date: item.date,
+                        updated_at: new Date().toISOString()
+                    };
+                    if (item.restrictions !== null) {
+                        row.restrictions = item.restrictions;
+                    }
 
-    return results;
+                    const { error: upsertError } = await supabaseClient
+                        .from('delivery_dates')
+                        .upsert([row], { onConflict: 'city_name', ignoreDuplicates: false });
+
+                    if (upsertError) throw upsertError;
+
+                    results.success.push({ city: item.city, action: 'updated', date: item.date });
+                } catch (err) {
+                    results.failed.push({ city: item.city, error: err.message });
+                }
+            }
+        }
+        return results;
+    };
+
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(
+            () => reject(new Error(`Превышено время ожидания (${UPDATE_TIMEOUT_MS / 1000} сек). Supabase может быть занят — попробуйте позже.`)),
+            UPDATE_TIMEOUT_MS
+        );
+    });
+
+    return Promise.race([doUpdate(), timeoutPromise]);
 }
 
 /**
