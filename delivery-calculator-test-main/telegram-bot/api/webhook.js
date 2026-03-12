@@ -5,7 +5,6 @@
 
 const TelegramBot = require('node-telegram-bot-api');
 const { parseDeliveryDates, formatParsedResults } = require('../parser');
-const { initSupabase, updateDeliveryDates } = require('../supabase');
 
 let bot = null;
 
@@ -18,18 +17,56 @@ function getBot() {
     return bot;
 }
 
-// Каждый запрос — свежее подключение к Supabase (избегаем stale connection в serverless)
-function ensureSupabase() {
-    const url = process.env.SUPABASE_URL;
+// Прямой fetch к Supabase REST API — обходим @supabase/supabase-js (TLS-проблемы на Vercel)
+async function updateDeliveryDatesFetch(deliveryData) {
+    const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) throw new Error('SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не установлены');
-    initSupabase(url, key);
+
+    const rows = deliveryData.map((item) => {
+        const row = {
+            city_name: item.city,
+            delivery_date: item.date,
+            updated_at: new Date().toISOString()
+        };
+        if (item.restrictions !== null) row.restrictions = item.restrictions;
+        return row;
+    });
+
+    const doUpsert = (data) =>
+        fetch(`${url}/rest/v1/delivery_dates?on_conflict=city_name`, {
+            method: 'POST',
+            headers: {
+                apikey: key,
+                Authorization: `Bearer ${key}`,
+                'Content-Type': 'application/json',
+                Prefer: 'resolution=merge-duplicates,return=minimal'
+            },
+            body: JSON.stringify(data)
+        });
+
+    let res = await doUpsert(rows);
+    if (!res.ok) {
+        const errText = await res.text();
+        if (/restrictions|column.*does not exist/i.test(errText)) {
+            const rowsNoRestrictions = rows.map(({ restrictions, ...r }) => r);
+            res = await doUpsert(rowsNoRestrictions);
+            if (!res.ok) throw new Error(`Supabase: ${res.status} ${await res.text()}`);
+        } else {
+            throw new Error(`Supabase: ${res.status} ${errText}`);
+        }
+    }
+
+    return {
+        success: deliveryData.map((item) => ({ city: item.city, action: 'updated', date: item.date })),
+        failed: [],
+        total: deliveryData.length
+    };
 }
 
 async function handleMessage(chatId, text, fromId) {
     const ADMIN_USER_ID = process.env.ADMIN_USER_ID ? parseInt(process.env.ADMIN_USER_ID) : null;
     const b = getBot();
-    ensureSupabase();
 
     if (ADMIN_USER_ID && fromId !== ADMIN_USER_ID) {
         await b.sendMessage(chatId, '❌ У вас нет доступа к этому боту.');
@@ -53,7 +90,7 @@ async function handleMessage(chatId, text, fromId) {
     const preview = formatParsedResults(parsedData);
     await b.sendMessage(chatId, preview + '\n\n⏳ Обновляю данные в Supabase...');
 
-    const results = await updateDeliveryDates(parsedData);
+    const results = await updateDeliveryDatesFetch(parsedData);
 
     let report = `✅ <b>Обновление завершено!</b>\n\n`;
     report += `📊 Всего обработано: ${results.total}\n`;
