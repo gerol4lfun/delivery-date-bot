@@ -23,15 +23,12 @@ async function updateDeliveryDatesFetch(deliveryData) {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) throw new Error('SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не установлены');
 
-    const rows = deliveryData.map((item) => {
-        const row = {
-            city_name: item.city,
-            delivery_date: item.date,
-            updated_at: new Date().toISOString()
-        };
-        if (item.restrictions !== null) row.restrictions = item.restrictions;
-        return row;
-    });
+    const rows = deliveryData.map((item) => ({
+        city_name: item.city,
+        delivery_date: item.date,
+        updated_at: new Date().toISOString(),
+        restrictions: item.restrictions ?? null
+    }));
 
     const doUpsert = (data) =>
         fetch(`${url}/rest/v1/delivery_dates?on_conflict=city_name`, {
