@@ -24,7 +24,7 @@ function initSupabase(url, serviceRoleKey) {
     return supabaseClient;
 }
 
-const UPDATE_TIMEOUT_MS = 30000; // 30 сек — не ждём бесконечно
+const UPDATE_TIMEOUT_MS = 8000; // 8 сек — укладываемся в Vercel free (10 сек)
 
 /**
  * Обновляет даты доставки в Supabase (пакетный upsert — 1 запрос вместо 2×N)
@@ -56,27 +56,34 @@ async function updateDeliveryDates(deliveryData) {
     });
 
     const doUpdate = async () => {
-        try {
-            const { error } = await supabaseClient
+        const tryUpsert = (dataRows) =>
+            supabaseClient
                 .from('delivery_dates')
-                .upsert(rows, {
-                    onConflict: 'city_name',
-                    ignoreDuplicates: false
-                });
+                .upsert(dataRows, { onConflict: 'city_name', ignoreDuplicates: false });
 
-            if (error) {
-                throw error;
-            }
+        try {
+            const { error } = await tryUpsert(rows);
+            if (error) throw error;
 
             deliveryData.forEach((item) => {
-                results.success.push({
-                    city: item.city,
-                    action: 'updated',
-                    date: item.date
-                });
+                results.success.push({ city: item.city, action: 'updated', date: item.date });
             });
         } catch (error) {
-            console.warn('Пакетный upsert не удался, пробуем по одному:', error.message);
+            // Если колонка restrictions отсутствует — пробуем без неё
+            const isRestrictionsError =
+                error.message && /restrictions|column.*does not exist/i.test(error.message);
+            if (isRestrictionsError) {
+                const rowsNoRestrictions = rows.map(({ restrictions, ...r }) => r);
+                const { error: err2 } = await tryUpsert(rowsNoRestrictions);
+                if (!err2) {
+                    deliveryData.forEach((item) => {
+                        results.success.push({ city: item.city, action: 'updated', date: item.date });
+                    });
+                    return results;
+                }
+            }
+
+            console.warn('Пакетный upsert не удался:', error.message);
             for (const item of deliveryData) {
                 try {
                     const row = {
@@ -84,16 +91,12 @@ async function updateDeliveryDates(deliveryData) {
                         delivery_date: item.date,
                         updated_at: new Date().toISOString()
                     };
-                    if (item.restrictions !== null) {
-                        row.restrictions = item.restrictions;
-                    }
+                    if (item.restrictions !== null) row.restrictions = item.restrictions;
 
                     const { error: upsertError } = await supabaseClient
                         .from('delivery_dates')
                         .upsert([row], { onConflict: 'city_name', ignoreDuplicates: false });
-
                     if (upsertError) throw upsertError;
-
                     results.success.push({ city: item.city, action: 'updated', date: item.date });
                 } catch (err) {
                     results.failed.push({ city: item.city, error: err.message });
