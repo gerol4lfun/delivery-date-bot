@@ -61,49 +61,64 @@ async function updateDeliveryDates(deliveryData) {
                 .from('delivery_dates')
                 .upsert(dataRows, { onConflict: 'city_name', ignoreDuplicates: false });
 
-        try {
-            const { error } = await tryUpsert(rows);
-            if (error) throw error;
+        const isRetryableError = (err) =>
+            err && err.message && /socket disconnected|ECONNRESET|ETIMEDOUT|TLS/i.test(err.message);
 
-            deliveryData.forEach((item) => {
-                results.success.push({ city: item.city, action: 'updated', date: item.date });
-            });
-        } catch (error) {
-            // Если колонка restrictions отсутствует — пробуем без неё
-            const isRestrictionsError =
-                error.message && /restrictions|column.*does not exist/i.test(error.message);
-            if (isRestrictionsError) {
-                const rowsNoRestrictions = rows.map(({ restrictions, ...r }) => r);
-                const { error: err2 } = await tryUpsert(rowsNoRestrictions);
-                if (!err2) {
-                    deliveryData.forEach((item) => {
-                        results.success.push({ city: item.city, action: 'updated', date: item.date });
-                    });
-                    return results;
-                }
-            }
+        let lastError;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const { error } = await tryUpsert(rows);
+                if (error) throw error;
 
-            console.warn('Пакетный upsert не удался:', error.message);
-            for (const item of deliveryData) {
-                try {
-                    const row = {
-                        city_name: item.city,
-                        delivery_date: item.date,
-                        updated_at: new Date().toISOString()
-                    };
-                    if (item.restrictions !== null) row.restrictions = item.restrictions;
-
-                    const { error: upsertError } = await supabaseClient
-                        .from('delivery_dates')
-                        .upsert([row], { onConflict: 'city_name', ignoreDuplicates: false });
-                    if (upsertError) throw upsertError;
+                deliveryData.forEach((item) => {
                     results.success.push({ city: item.city, action: 'updated', date: item.date });
-                } catch (err) {
-                    results.failed.push({ city: item.city, error: err.message });
+                });
+                return results;
+            } catch (error) {
+                lastError = error;
+                // Если колонка restrictions отсутствует — пробуем без неё
+                const isRestrictionsError =
+                    error.message && /restrictions|column.*does not exist/i.test(error.message);
+                if (isRestrictionsError) {
+                    const rowsNoRestrictions = rows.map(({ restrictions, ...r }) => r);
+                    const { error: err2 } = await tryUpsert(rowsNoRestrictions);
+                    if (!err2) {
+                        deliveryData.forEach((item) => {
+                            results.success.push({ city: item.city, action: 'updated', date: item.date });
+                        });
+                        return results;
+                    }
                 }
+
+                if (isRetryableError(error) && attempt < 3) {
+                    console.warn(`Supabase попытка ${attempt}/3 не удалась, повторяю через 1 сек:`, error.message);
+                    await new Promise((r) => setTimeout(r, 1000));
+                    continue;
+                }
+
+                console.warn('Пакетный upsert не удался:', error.message);
+                for (const item of deliveryData) {
+                    try {
+                        const row = {
+                            city_name: item.city,
+                            delivery_date: item.date,
+                            updated_at: new Date().toISOString()
+                        };
+                        if (item.restrictions !== null) row.restrictions = item.restrictions;
+
+                        const { error: upsertError } = await supabaseClient
+                            .from('delivery_dates')
+                            .upsert([row], { onConflict: 'city_name', ignoreDuplicates: false });
+                        if (upsertError) throw upsertError;
+                        results.success.push({ city: item.city, action: 'updated', date: item.date });
+                    } catch (err) {
+                        results.failed.push({ city: item.city, error: err.message });
+                    }
+                }
+                return results;
             }
         }
-        return results;
+        throw lastError;
     };
 
     const timeoutPromise = new Promise((_, reject) => {
