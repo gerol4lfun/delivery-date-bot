@@ -8,7 +8,6 @@ const { parseDeliveryDates, formatParsedResults } = require('../parser');
 const { initSupabase, updateDeliveryDates } = require('../supabase');
 
 let bot = null;
-let supabaseReady = false;
 
 function getBot() {
     if (!bot) {
@@ -19,14 +18,12 @@ function getBot() {
     return bot;
 }
 
+// Каждый запрос — свежее подключение к Supabase (избегаем stale connection в serverless)
 function ensureSupabase() {
-    if (!supabaseReady) {
-        const url = process.env.SUPABASE_URL;
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        if (!url || !key) throw new Error('SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не установлены');
-        initSupabase(url, key);
-        supabaseReady = true;
-    }
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) throw new Error('SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не установлены');
+    initSupabase(url, key);
 }
 
 async function handleMessage(chatId, text, fromId) {
