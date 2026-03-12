@@ -1,5 +1,6 @@
 /**
- * Telegram бот для обновления дат доставки в Supabase
+ * Telegram бот — режим POLLING (Railway / локально)
+ * На Vercel НЕ используется — там только api/webhook.js
  */
 
 require('dotenv').config();

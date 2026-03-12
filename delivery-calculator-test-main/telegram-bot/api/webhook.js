@@ -1,6 +1,6 @@
 /**
- * Vercel Serverless: Telegram webhook
- * Telegram шлёт POST сюда при каждом сообщении
+ * Vercel Serverless: Telegram webhook (единственный режим на Vercel)
+ * index.js с polling здесь НЕ используется
  */
 
 const TelegramBot = require('node-telegram-bot-api');
