@@ -2,6 +2,177 @@
  * Парсер текста для извлечения городов и дат доставки
  */
 
+const STATUS_MAP = {
+    'ДС': { available_without_assembly: true, available_with_assembly: true },
+    'Д': { available_without_assembly: true, available_with_assembly: false },
+    'С': { available_without_assembly: false, available_with_assembly: false },
+    'X': { available_without_assembly: false, available_with_assembly: false }
+};
+
+const MONTH_NAMES = {
+    'январь': 1, 'января': 1, 'февраль': 2, 'февраля': 2, 'март': 3, 'марта': 3,
+    'апрель': 4, 'апреля': 4, 'май': 5, 'мая': 5, 'июнь': 6, 'июня': 6,
+    'июль': 7, 'июля': 7, 'август': 8, 'августа': 8, 'сентябрь': 9, 'сентября': 9,
+    'октябрь': 10, 'октября': 10, 'ноябрь': 11, 'ноября': 11, 'декабрь': 12, 'декабря': 12
+};
+
+const DIRECTION_ALIAS = {
+    'москва и мо': 'Москва',
+    'москва и м.о.': 'Москва',
+    'москва': 'Москва',
+    'санкт-петербург и обл.': 'Санкт-Петербург',
+    'санкт-петербург и ло': 'Санкт-Петербург',
+    'спб и ло': 'Санкт-Петербург',
+    'питер': 'Санкт-Петербург',
+    'петербург': 'Санкт-Петербург',
+    'спб': 'Санкт-Петербург'
+};
+
+function statusToFlags(raw) {
+    const s = (raw || '').trim().toUpperCase();
+    return STATUS_MAP[s] ?? { available_without_assembly: false, available_with_assembly: false };
+}
+
+function toCanonicalDirection(name) {
+    const lower = (name || '').trim().toLowerCase();
+    if (DIRECTION_ALIAS[lower]) return DIRECTION_ALIAS[lower];
+    for (const [key, val] of Object.entries(DIRECTION_ALIAS)) {
+        if (lower.includes(key) || key.includes(lower)) return val;
+    }
+    return normalizeCityName(name);
+}
+
+function ddMmToIsoDate(dd, mm, year) {
+    const d = parseInt(dd, 10);
+    const m = parseInt(mm, 10);
+    if (isNaN(d) || isNaN(m) || d < 1 || d > 31 || m < 1 || m > 12) return null;
+    const y = year || new Date().getFullYear();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+const validStatus = /^[ДСX]{1,2}$/i;
+
+/**
+ * Парсит календарный формат: месяц/год в заголовке, строка с днями, строки направлений, ячейки X/ДС/Д/С.
+ * Дни берутся из строки-заголовка, не из индекса колонки.
+ * Возвращает { rows, confident }. confident=true только при полном успешном разборе.
+ */
+function parseDeliveryCalendar(text) {
+    const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+
+    const tableResult = parseDeliveryCalendarTable(lines);
+    if (tableResult.confident && tableResult.rows.length > 0) return tableResult;
+
+    const textRows = parseDeliveryCalendarTextFallback(lines);
+    return { rows: textRows, confident: textRows.length > 0 };
+}
+
+function parseDeliveryCalendarTable(lines) {
+    if (lines.length < 3) return { rows: [], confident: false };
+
+    const monthMatch = lines[0].match(/^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\s+(\d{4})$/i);
+    if (!monthMatch) return { rows: [], confident: false };
+
+    const currentMonth = MONTH_NAMES[monthMatch[1].toLowerCase()];
+    const currentYear = parseInt(monthMatch[2], 10);
+    if (!currentMonth || isNaN(currentYear)) return { rows: [], confident: false };
+
+    const dayCells = lines[1].split(/\s+/).filter((c) => c.length > 0);
+    const dayNumbers = [];
+    for (const c of dayCells) {
+        const n = parseInt(c, 10);
+        if (!isNaN(n) && n >= 1 && n <= 31) dayNumbers.push(n);
+        else break;
+    }
+    if (dayNumbers.length === 0) return { rows: [], confident: false };
+
+    const results = [];
+    for (let i = 2; i < lines.length; i++) {
+        const line = lines[i];
+        let cells = line.split(/\s{2,}|\t/).filter((c) => c.length > 0);
+        if (cells.length < 2) cells = line.split(/\s+/).filter((c) => c.length > 0);
+        if (cells.length < 2) continue;
+
+        let directionEnd = -1;
+        for (let k = 0; k < cells.length; k++) {
+            if (validStatus.test(cells[k].trim())) {
+                directionEnd = k;
+                break;
+            }
+        }
+        if (directionEnd < 0) continue;
+
+        const direction = cells.slice(0, directionEnd).join(' ').trim();
+        const statusCells = cells.slice(directionEnd).map((c) => c.trim()).filter((c) => validStatus.test(c));
+        if (statusCells.length !== dayNumbers.length) return { rows: [], confident: false };
+
+        const canonical = toCanonicalDirection(direction);
+        for (let j = 0; j < dayNumbers.length; j++) {
+            const iso = ddMmToIsoDate(String(dayNumbers[j]), String(currentMonth), currentYear);
+            if (!iso) return { rows: [], confident: false };
+            const status = statusCells[j].toUpperCase();
+            if (!STATUS_MAP[status]) return { rows: [], confident: false };
+            const flags = statusToFlags(status);
+            results.push({
+                city_name: canonical,
+                delivery_date: iso,
+                available_without_assembly: flags.available_without_assembly,
+                available_with_assembly: flags.available_with_assembly,
+                raw_status: status
+            });
+        }
+    }
+
+    return { rows: results, confident: results.length > 0 };
+}
+
+function parseDeliveryCalendarTextFallback(lines) {
+    const currentYear = new Date().getFullYear();
+    const results = [];
+    const pairRe = /(\d{1,2})\.(\d{1,2})\s+([ДСX]{1,2})/gi;
+    for (const line of lines) {
+        const pairs = [];
+        let m;
+        while ((m = pairRe.exec(line)) !== null) {
+            pairs.push({ dd: m[1], mm: m[2], status: m[3].toUpperCase() });
+        }
+        if (pairs.length === 0) continue;
+        const dirEnd = line.search(/\d{1,2}\.\d{1,2}\s+[ДСX]/i);
+        const direction = dirEnd >= 0 ? line.slice(0, dirEnd).trim() : line.trim();
+        if (!direction) continue;
+        const canonical = toCanonicalDirection(direction);
+        for (const p of pairs) {
+            const iso = ddMmToIsoDate(p.dd, p.mm, currentYear);
+            if (iso && STATUS_MAP[p.status]) {
+                const flags = statusToFlags(p.status);
+                results.push({
+                    city_name: canonical,
+                    delivery_date: iso,
+                    available_without_assembly: flags.available_without_assembly,
+                    available_with_assembly: flags.available_with_assembly,
+                    raw_status: p.status
+                });
+            }
+        }
+    }
+    return results;
+}
+
+function formatParsedCalendarResults(rows) {
+    if (rows.length === 0) return '❌ Не найдено записей в календарном формате';
+    const byCity = {};
+    for (const r of rows) {
+        if (!byCity[r.city_name]) byCity[r.city_name] = [];
+        byCity[r.city_name].push(r);
+    }
+    let msg = `✅ Найдено записей: ${rows.length}\n\n`;
+    for (const [city, items] of Object.entries(byCity)) {
+        msg += `${city}: ${items.length} дат\n`;
+    }
+    return msg;
+}
+
 function normalizeRestrictions(raw) {
     if (!raw || !raw.trim()) return null;
     return raw
@@ -117,6 +288,8 @@ function formatParsedResults(results) {
 
 module.exports = {
     parseDeliveryDates,
-    normalizeCityName,
-    formatParsedResults
+    parseDeliveryCalendar,
+    formatParsedResults,
+    formatParsedCalendarResults,
+    normalizeCityName
 };

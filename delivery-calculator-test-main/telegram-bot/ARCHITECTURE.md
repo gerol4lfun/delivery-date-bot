@@ -15,6 +15,15 @@
 - Работает только `api/webhook.js` — index.js не используется
 - После деплоя: `setWebhook?url=https://...vercel.app/api/webhook`
 
+## Storage
+
+| Таблица | Формат | Парсер |
+|---------|--------|--------|
+| `delivery_dates` | Старый: город + одна дата + restrictions | `parseDeliveryDates` |
+| `delivery_calendar` | Новый: календарь по дням (X/ДС/Д/С) | `parseDeliveryCalendar` |
+
+Календарь: `city_name`, `delivery_date` (DATE), `available_without_assembly`, `available_with_assembly`, `raw_status`. SQL: `sql/delivery_calendar_setup.sql`.
+
 ## Railway
 
 - Root Directory: `delivery-calculator-test-main/telegram-bot`

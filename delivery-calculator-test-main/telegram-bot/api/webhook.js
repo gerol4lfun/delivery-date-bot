@@ -4,7 +4,12 @@
  */
 
 const TelegramBot = require('node-telegram-bot-api');
-const { parseDeliveryDates, formatParsedResults } = require('../parser');
+const {
+    parseDeliveryDates,
+    parseDeliveryCalendar,
+    formatParsedResults,
+    formatParsedCalendarResults
+} = require('../parser');
 
 let bot = null;
 
@@ -61,6 +66,44 @@ async function updateDeliveryDatesFetch(deliveryData) {
     };
 }
 
+async function updateDeliveryCalendarFetch(rows) {
+    const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) throw new Error('SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не установлены');
+
+    const data = rows.map((r) => ({
+        city_name: r.city_name,
+        delivery_date: r.delivery_date,
+        available_without_assembly: r.available_without_assembly,
+        available_with_assembly: r.available_with_assembly,
+        raw_status: r.raw_status ?? null,
+        updated_at: new Date().toISOString()
+    }));
+
+    const res = await fetch(`${url}/rest/v1/delivery_calendar?on_conflict=city_name,delivery_date`, {
+        method: 'POST',
+        headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify(data)
+    });
+
+    if (!res.ok) throw new Error(`Supabase: ${res.status} ${await res.text()}`);
+
+    const byCity = {};
+    for (const r of rows) {
+        byCity[r.city_name] = (byCity[r.city_name] || 0) + 1;
+    }
+    return {
+        success: Object.entries(byCity).map(([city, count]) => ({ city, action: 'updated', date: `${count} дат` })),
+        failed: [],
+        total: rows.length
+    };
+}
+
 async function handleMessage(chatId, text, fromId) {
     const ADMIN_USER_ID = process.env.ADMIN_USER_ID ? parseInt(process.env.ADMIN_USER_ID) : null;
     const b = getBot();
@@ -77,10 +120,28 @@ async function handleMessage(chatId, text, fromId) {
 
     await b.sendMessage(chatId, '⏳ Обрабатываю данные...');
 
-    const parsedData = parseDeliveryDates(text);
+    const calendarParse = parseDeliveryCalendar(text);
+    const useCalendar = calendarParse.confident && calendarParse.rows.length > 0;
 
+    if (useCalendar) {
+        const preview = formatParsedCalendarResults(calendarParse.rows);
+        await b.sendMessage(chatId, preview + '\n\n⏳ Обновляю календарь в Supabase...');
+        try {
+            const results = await updateDeliveryCalendarFetch(calendarParse.rows);
+            console.log('[webhook] delivery_calendar upsert ok, rows:', results.total);
+            const report = `✅ <b>Календарь обновлён!</b>\n\n📊 Записей: ${results.total}\n✅ Городов: ${results.success.length}\n`;
+            const cities = results.success.slice(0, 10).map((s) => `• ${s.city} — ${s.date}`).join('\n');
+            await b.sendMessage(chatId, report + (cities ? '\n<b>Обновлено:</b>\n' + cities : ''), { parse_mode: 'HTML' });
+        } catch (err) {
+            console.error('[webhook] delivery_calendar failed:', err.message);
+            throw err;
+        }
+        return;
+    }
+
+    const parsedData = parseDeliveryDates(text);
     if (parsedData.length === 0) {
-        await b.sendMessage(chatId, '❌ Не найдено ни одной записи в правильном формате.\n\nИспользуйте формат: "Город с ДД.ММ"\n\nПример: Москва с 9.02');
+        await b.sendMessage(chatId, '❌ Не найдено записей.\n\nФорматы: календарь (Март + таблица X/ДС/Д/С) или «Город с ДД.ММ»');
         return;
     }
 
@@ -177,15 +238,16 @@ module.exports = async (req, res) => {
         return;
     }
 
-    const hasMessage = !!update?.message;
-    console.log('[webhook] update.message exists:', hasMessage);
+    const msg = update?.message ?? update?.edited_message;
+    const hasMessage = !!msg;
+    console.log('[webhook] update.message/edited_message exists:', hasMessage);
 
     if (!hasMessage) {
         res.status(200).end();
         return;
     }
 
-    const { chat, text, from } = update.message;
+    const { chat, text, from } = msg;
     const chatId = chat?.id;
     const fromId = from?.id ?? null;
 
