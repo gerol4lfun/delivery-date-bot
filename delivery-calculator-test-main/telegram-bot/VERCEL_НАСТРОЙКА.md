@@ -1,34 +1,40 @@
 # Настройка бота на Vercel (webhook)
 
+Краткая операционная инструкция. Используется только Vercel + webhook. Source of truth: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
 ## 1. Деплой
 
-Vercel подхватит изменения из GitHub. Либо вручную: **Redeploy** в dashboard.
+Vercel подхватывает изменения из GitHub. Либо вручную: **Redeploy** в dashboard.
 
-**Root Directory** в настройках проекта должен быть: `delivery-calculator-test-main/telegram-bot`
+**Root Directory:** `delivery-calculator-test-main/telegram-bot`
 
-## 2. Установить webhook в Telegram
+---
 
-После деплоя выполни **один раз** (подставь свой URL и токен):
+## 2. Webhook
 
-```bash
-curl "https://api.telegram.org/bot<ТВОЙ_BOT_TOKEN>/setWebhook?url=https://delivery-bot-telegram.vercel.app/api/webhook"
+После деплоя выполнить один раз (подставь URL и токен):
+
 ```
-
-Или в браузере:
-```
-https://api.telegram.org/bot<ТВОЙ_BOT_TOKEN>/setWebhook?url=https://delivery-bot-telegram.vercel.app/api/webhook
+https://api.telegram.org/bot<ТВОЙ_BOT_TOKEN>/setWebhook?url=https://<ТВОЙ_ПРОЕКТ>.vercel.app/api/webhook
 ```
 
 Ответ `{"ok":true}` — webhook установлен.
 
-## 3. Переменные окружения в Vercel
+---
 
-В настройках проекта → Environment Variables:
+## 3. Переменные окружения
+
+Settings → Environment Variables:
+
 - `TELEGRAM_BOT_TOKEN`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_USER_ID` (опционально)
 
-## 4. Если бот был на Railway (polling)
+---
 
-После установки webhook **отключи** бота на Railway, иначе будут конфликты.
+## 4. Railway
+
+Railway больше не используется. Если бот когда-то был на Railway — отключи его, иначе конфликты с webhook.

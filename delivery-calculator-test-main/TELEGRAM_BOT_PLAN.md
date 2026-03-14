@@ -1,3 +1,7 @@
+> **DEPRECATED.** Старый план. Railway/Heroku no longer used. Not source of truth. См. [telegram-bot/ARCHITECTURE.md](telegram-bot/ARCHITECTURE.md).
+
+---
+
 # 🤖 План создания Telegram бота для обновления дат доставки
 
 ## 📊 Оценка вариантов
