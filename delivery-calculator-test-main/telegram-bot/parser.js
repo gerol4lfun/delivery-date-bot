@@ -77,14 +77,18 @@ function parseDeliveryCalendar(text) {
 function parseDeliveryCalendarTable(lines) {
     if (lines.length < 3) return { rows: [], confident: false };
 
-    const monthMatch = lines[0].match(/^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\s+(\d{4})$/i);
+    const stripTrailingEllipsis = (s) => (s || '').replace(/\s*[.…]{2,}\s*$/g, '').trim();
+    const cleanedLines = lines.map(stripTrailingEllipsis).filter((l) => l.length > 0);
+    if (cleanedLines.length < 3) return { rows: [], confident: false };
+
+    const monthMatch = cleanedLines[0].match(/^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\s+(\d{4})$/i);
     if (!monthMatch) return { rows: [], confident: false };
 
     const currentMonth = MONTH_NAMES[monthMatch[1].toLowerCase()];
     const currentYear = parseInt(monthMatch[2], 10);
     if (!currentMonth || isNaN(currentYear)) return { rows: [], confident: false };
 
-    const dayCells = lines[1].split(/\s+/).filter((c) => c.length > 0);
+    const dayCells = cleanedLines[1].split(/\s+/).filter((c) => c.length > 0);
     const dayNumbers = [];
     for (const c of dayCells) {
         const n = parseInt(c, 10);
@@ -94,8 +98,8 @@ function parseDeliveryCalendarTable(lines) {
     if (dayNumbers.length === 0) return { rows: [], confident: false };
 
     const results = [];
-    for (let i = 2; i < lines.length; i++) {
-        const line = lines[i];
+    for (let i = 2; i < cleanedLines.length; i++) {
+        const line = cleanedLines[i];
         let cells = line.split(/\s{2,}|\t/).filter((c) => c.length > 0);
         if (cells.length < 2) cells = line.split(/\s+/).filter((c) => c.length > 0);
         if (cells.length < 2) continue;
