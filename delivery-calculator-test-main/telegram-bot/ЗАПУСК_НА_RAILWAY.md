@@ -1,3 +1,7 @@
+> **DEPRECATED.** Railway no longer used. Not source of truth. См. [ARCHITECTURE.md](ARCHITECTURE.md), [VERCEL_НАСТРОЙКА.md](VERCEL_НАСТРОЙКА.md).
+
+---
+
 # Запуск бота на Railway (рабочий вариант)
 
 Polling, без webhook. Бот работает стабильно.
@@ -8,7 +12,7 @@ Polling, без webhook. Бот работает стабильно.
 
 Открой в браузере:
 ```
-https://api.telegram.org/bot8209732839:AAGRAknOBp1qPQa9GuEQj0HiZwrmF5ReWgs/deleteWebhook
+https://api.telegram.org/bot<ТВОЙ_BOT_TOKEN>/deleteWebhook
 ```
 Ответ `{"ok":true}` — ок.
 

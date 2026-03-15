@@ -25,7 +25,12 @@ const DIRECTION_ALIAS = {
     'спб и ло': 'Санкт-Петербург',
     'питер': 'Санкт-Петербург',
     'петербург': 'Санкт-Петербург',
-    'спб': 'Санкт-Петербург'
+    'спб': 'Санкт-Петербург',
+    'великий новгород': 'Великий Новгород',
+    'нижний новгород': 'Нижний Новгород',
+    'набережные челны': 'Набережные Челны',
+    'йошкар-ола': 'Йошкар-Ола',
+    'ростов-на-дону': 'Ростов-на-Дону'
 };
 
 function statusToFlags(raw) {
@@ -261,8 +266,12 @@ function normalizeCityName(city) {
         }
     }
 
-    // Если не найдено, возвращаем с заглавной буквы
-    return city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
+    return toTitleCase(city.trim());
+}
+
+function toTitleCase(str) {
+    if (!str || !str.trim()) return str;
+    return str.toLowerCase().trim().replace(/(^|[\s\-])(.)/g, (m, sep, c) => sep + c.toUpperCase());
 }
 
 /**

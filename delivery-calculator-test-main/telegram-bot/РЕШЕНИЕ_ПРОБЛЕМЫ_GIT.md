@@ -1,3 +1,7 @@
+> **DEPRECATED.** Railway no longer used. Not source of truth. См. [ARCHITECTURE.md](ARCHITECTURE.md), [VERCEL_НАСТРОЙКА.md](VERCEL_НАСТРОЙКА.md).
+
+---
+
 # 🔧 Решение проблемы с GitHub Desktop
 
 ## ❌ Проблема: "This directory does not appear to be a Git repository"
