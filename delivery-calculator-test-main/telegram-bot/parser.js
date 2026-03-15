@@ -71,22 +71,22 @@ function parseDeliveryCalendar(text) {
     if (tableResult.confident && tableResult.rows.length > 0) return tableResult;
 
     const textRows = parseDeliveryCalendarTextFallback(lines);
-    return { rows: textRows, confident: textRows.length > 0 };
+    return { rows: textRows, confident: textRows.length > 0, error: textRows.length > 0 ? null : (tableResult.error || null) };
 }
 
 function parseDeliveryCalendarTable(lines) {
-    if (lines.length < 3) return { rows: [], confident: false };
+    if (lines.length < 3) return { rows: [], confident: false, error: null };
 
     const stripTrailingEllipsis = (s) => (s || '').replace(/\s*[.…]{2,}\s*$/g, '').trim();
     const cleanedLines = lines.map(stripTrailingEllipsis).filter((l) => l.length > 0);
-    if (cleanedLines.length < 3) return { rows: [], confident: false };
+    if (cleanedLines.length < 3) return { rows: [], confident: false, error: null };
 
     const monthMatch = cleanedLines[0].match(/^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\s+(\d{4})$/i);
-    if (!monthMatch) return { rows: [], confident: false };
+    if (!monthMatch) return { rows: [], confident: false, error: null };
 
     const currentMonth = MONTH_NAMES[monthMatch[1].toLowerCase()];
     const currentYear = parseInt(monthMatch[2], 10);
-    if (!currentMonth || isNaN(currentYear)) return { rows: [], confident: false };
+    if (!currentMonth || isNaN(currentYear)) return { rows: [], confident: false, error: 'Не удалось распознать месяц и год в заголовке календаря.' };
 
     const dayCells = cleanedLines[1].split(/\s+/).filter((c) => c.length > 0);
     const dayNumbers = [];
@@ -95,9 +95,10 @@ function parseDeliveryCalendarTable(lines) {
         if (!isNaN(n) && n >= 1 && n <= 31) dayNumbers.push(n);
         else break;
     }
-    if (dayNumbers.length === 0) return { rows: [], confident: false };
+    if (dayNumbers.length === 0) return { rows: [], confident: false, error: 'Не удалось распознать строку дней в календаре.' };
 
     const results = [];
+    const badRows = [];
     for (let i = 2; i < cleanedLines.length; i++) {
         const line = cleanedLines[i];
         let cells = line.split(/\s{2,}|\t/).filter((c) => c.length > 0);
@@ -115,14 +116,23 @@ function parseDeliveryCalendarTable(lines) {
 
         const direction = cells.slice(0, directionEnd).join(' ').trim();
         const statusCells = cells.slice(directionEnd).map((c) => c.trim()).filter((c) => validStatus.test(c));
-        if (statusCells.length !== dayNumbers.length) return { rows: [], confident: false };
+        if (statusCells.length !== dayNumbers.length) {
+            badRows.push({ direction, got: statusCells.length, expected: dayNumbers.length });
+            continue;
+        }
 
         const canonical = toCanonicalDirection(direction);
         for (let j = 0; j < dayNumbers.length; j++) {
             const iso = ddMmToIsoDate(String(dayNumbers[j]), String(currentMonth), currentYear);
-            if (!iso) return { rows: [], confident: false };
+            if (!iso) {
+                badRows.push({ direction, got: statusCells.length, expected: dayNumbers.length, msg: 'ошибка даты' });
+                break;
+            }
             const status = statusCells[j].toUpperCase();
-            if (!STATUS_MAP[status]) return { rows: [], confident: false };
+            if (!STATUS_MAP[status]) {
+                badRows.push({ direction, got: statusCells.length, expected: dayNumbers.length, msg: `неизвестный статус "${status}"` });
+                break;
+            }
             const flags = statusToFlags(status);
             results.push({
                 city_name: canonical,
@@ -134,7 +144,15 @@ function parseDeliveryCalendarTable(lines) {
         }
     }
 
-    return { rows: results, confident: results.length > 0 };
+    if (badRows.length > 0) {
+        const report = badRows.map((r) => `«${r.direction}»: ${r.got} статусов (ожидалось ${r.expected})${r.msg ? ' — ' + r.msg : ''}`).join('; ');
+        return {
+            rows: [],
+            confident: false,
+            error: `Неверное количество статусов (${dayNumbers.length} дней в заголовке): ${report}`
+        };
+    }
+    return { rows: results, confident: results.length > 0, error: results.length > 0 ? null : 'Календарный формат распознан, но валидных записей не найдено.' };
 }
 
 function parseDeliveryCalendarTextFallback(lines) {

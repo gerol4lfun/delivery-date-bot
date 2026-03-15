@@ -141,7 +141,8 @@ async function handleMessage(chatId, text, fromId) {
 
     const parsedData = parseDeliveryDates(text);
     if (parsedData.length === 0) {
-        await b.sendMessage(chatId, '❌ Не найдено записей.\n\nФорматы: календарь (Март + таблица X/ДС/Д/С) или «Город с ДД.ММ»');
+        const calendarHint = calendarParse.error ? `\n\nОшибка календаря: ${calendarParse.error}` : '';
+        await b.sendMessage(chatId, '❌ Не найдено записей.\n\nФорматы: календарь (Март + таблица X/ДС/Д/С) или «Город с ДД.ММ»' + calendarHint);
         return;
     }
 
