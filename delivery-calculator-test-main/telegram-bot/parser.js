@@ -5,8 +5,9 @@
 const STATUS_MAP = {
     'ДС': { available_without_assembly: true, available_with_assembly: true },
     'Д': { available_without_assembly: true, available_with_assembly: false },
-    'С': { available_without_assembly: false, available_with_assembly: false },
-    'X': { available_without_assembly: false, available_with_assembly: false }
+    'С': { available_without_assembly: false, available_with_assembly: true },
+    'X': { available_without_assembly: false, available_with_assembly: false },
+    'Х': { available_without_assembly: false, available_with_assembly: false }
 };
 
 const MONTH_NAMES = {
@@ -56,7 +57,7 @@ function ddMmToIsoDate(dd, mm, year) {
     return `${y}-${pad(m)}-${pad(d)}`;
 }
 
-const validStatus = /^[ДСX]{1,2}$/i;
+const validStatus = /^[ДСXХ]{1,2}$/i;
 
 /**
  * Парсит календарный формат: месяц/год в заголовке, строка с днями, строки направлений, ячейки X/ДС/Д/С.
@@ -135,7 +136,7 @@ function parseDeliveryCalendarTable(lines) {
 function parseDeliveryCalendarTextFallback(lines) {
     const currentYear = new Date().getFullYear();
     const results = [];
-    const pairRe = /(\d{1,2})\.(\d{1,2})\s+([ДСX]{1,2})/gi;
+    const pairRe = /(\d{1,2})\.(\d{1,2})\s+([ДСXХ]{1,2})/gi;
     for (const line of lines) {
         const pairs = [];
         let m;
@@ -143,7 +144,7 @@ function parseDeliveryCalendarTextFallback(lines) {
             pairs.push({ dd: m[1], mm: m[2], status: m[3].toUpperCase() });
         }
         if (pairs.length === 0) continue;
-        const dirEnd = line.search(/\d{1,2}\.\d{1,2}\s+[ДСX]/i);
+        const dirEnd = line.search(/\d{1,2}\.\d{1,2}\s+[ДСXХ]/i);
         const direction = dirEnd >= 0 ? line.slice(0, dirEnd).trim() : line.trim();
         if (!direction) continue;
         const canonical = toCanonicalDirection(direction);

@@ -63,7 +63,8 @@
 **Маппинг статусов:**
 - ДС → available_without_assembly + available_with_assembly
 - Д → available_without_assembly, без сборки
-- С, X → недоступно
+- С → только со сборкой (available_with_assembly)
+- X / Х → недоступно
 
 **Текущий статус загрузки:** март загружен; апрель и май планируются.
 
