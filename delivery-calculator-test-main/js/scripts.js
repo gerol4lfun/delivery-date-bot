@@ -2858,10 +2858,12 @@ async function loadAllDeliveryDates() {
 
     try {
         // Загружаем только базовые поля (без restrictions, т.к. поле может отсутствовать)
+        // .range(0, 9999) — общий фикс модалки дат: Supabase по умолчанию возвращает до 1000 строк
         const { data, error } = await supabaseClient
             .from('delivery_dates')
             .select('city_name, delivery_date')
-            .order('city_name');
+            .order('city_name')
+            .range(0, 9999);
 
         // Добавляем пустое поле restrictions для совместимости с кодом отрисовки
         let dataWithRestrictions = null;
