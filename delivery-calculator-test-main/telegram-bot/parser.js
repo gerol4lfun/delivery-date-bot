@@ -18,8 +18,8 @@ const MONTH_NAMES = {
 };
 
 const DIRECTION_ALIAS = {
-    'москва и мо': 'Москва',
-    'москва и м.о.': 'Москва',
+    'москва и мо': 'Москва и МО',
+    'москва и м.о.': 'Москва и МО',
     'москва': 'Москва',
     'санкт-петербург и обл.': 'Санкт-Петербург',
     'санкт-петербург и ло': 'Санкт-Петербург',
@@ -116,10 +116,6 @@ function parseDeliveryCalendarTable(lines) {
 
         const direction = cells.slice(0, directionEnd).join(' ').trim();
         let statusCells = cells.slice(directionEnd).map((c) => c.trim()).filter((c) => validStatus.test(c));
-        // Мягкая валидация: если не хватает 1 статуса — дополняем X (день недоступен)
-        if (statusCells.length === dayNumbers.length - 1) {
-            statusCells = [...statusCells, 'X'];
-        }
         if (statusCells.length !== dayNumbers.length) {
             badRows.push({ direction, got: statusCells.length, expected: dayNumbers.length });
             continue;
