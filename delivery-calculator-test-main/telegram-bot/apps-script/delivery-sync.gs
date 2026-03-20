@@ -58,8 +58,9 @@ function extractDayNumber(val) {
 }
 
 function isMonthHeader(cell) {
-  if (!cell || typeof cell !== 'string') return null;
-  var m = (cell + '').match(/^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\s*(\d{4})?$/i);
+  var s = (cell || '').toString().trim();
+  if (!s) return null;
+  var m = s.match(/^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\s*(\d{4})?$/i);
   if (m) {
     var year = m[2] ? parseInt(m[2], 10) : new Date().getFullYear();
     return { month: m[1].toLowerCase(), year: year };
@@ -95,6 +96,11 @@ function processSheetRows(rows) {
       monthInfo = isMonthHeader(row[c]);
       if (monthInfo) break;
     }
+    if (i < 5) {
+      var fc = row[0];
+      Logger.log('DEBUG Row' + i + ' firstCell="' + (fc + '') + '" type=' + typeof fc + ' monthFound=' + !!monthInfo);
+      if (monthInfo) Logger.log('  -> month: ' + monthInfo.month + ' ' + monthInfo.year);
+    }
     if (!monthInfo) { i++; continue; }
 
     var year = monthInfo.year;
@@ -114,7 +120,23 @@ function processSheetRows(rows) {
       }
     }
 
-    if (dayNumbers.length === 0) { i++; continue; }
+    if (dayNumbers.length === 0 && i + 1 < rows.length && isDayNamesRow(rows[i])) {
+      i++;
+      daysRow = rows[i];
+      if (daysRow) {
+        for (var j = 0; j < daysRow.length; j++) {
+          var d = extractDayNumber(daysRow[j]);
+          if (d != null) dayNumbers.push(d);
+          else if (dayNumbers.length > 0) break;
+        }
+      }
+    }
+
+    if (dayNumbers.length === 0) {
+      Logger.log('DEBUG: month found row' + (i - 1) + ', daysRow row' + i + ' dayNumbers=0 vals=' + JSON.stringify((daysRow || []).slice(0, 5)));
+      i++;
+      continue;
+    }
     i++;
 
     if (i < rows.length && isDayNamesRow(rows[i])) i++;
@@ -201,6 +223,17 @@ function runDeliverySync() {
 
   var allBlocks = [];
   var sheets = ss.getSheets();
+  if (sheets.length > 0) {
+    var values0 = sheets[0].getDataRange().getValues();
+    Logger.log('DEBUG: Sheet "' + sheets[0].getName() + '" rows=' + values0.length);
+    for (var r = 0; r < Math.min(8, values0.length); r++) {
+      var preview = values0[r].map(function(c) {
+        if (c && typeof c === 'object' && c.getMonth) return '[Date]';
+        return (c === null || c === undefined) ? '' : (c + '').substring(0, 30);
+      });
+      Logger.log('DEBUG Row' + r + ': ' + JSON.stringify(preview));
+    }
+  }
   for (var i = 0; i < sheets.length; i++) {
     var values = sheets[i].getDataRange().getValues();
     var blocks = processSheetRows(values);
