@@ -136,7 +136,8 @@ function processSheetRows(rows) {
     var dataRows = [];
     while (i < rows.length) {
       var r = rows[i];
-      if (isEmptyRow(r)) { i++; break; }
+      if (isEmptyRow(r)) { i++; continue; }
+      if (isMonthHeader(r[0])) break;
       if (!r || r.length < 2) { i++; break; }
 
       var direction = (r[0] || '').toString().trim();
