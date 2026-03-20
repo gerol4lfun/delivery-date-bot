@@ -8,11 +8,11 @@
  *
  * Trigger: time-driven, каждые 10–15 минут.
  *
- * Структура листа:
- *   - строка: "Март 2026" (месяц + год)
- *   - строка: номера дней (14 15 16 ...)
- *   - строка: дни недели (Пн Вт Ср ...) — пропускается
- *   - строки: направление + статусы X/ДС/Д/С
+ * Структура листа (реальная):
+ *   - Row0: [месяц, Date, Date, ...] — месяц в col0, даты в col1+
+ *   - Row1: ["", "вс", "пн", ...] — дни недели, пропускается
+ *   - Row2+: [город, статус, статус, ...] — направления и статусы X/ДС/Д/С
+ *   - пустая строка — разделитель между месяцами
  */
 
 var MONTH_NAMES = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
@@ -44,15 +44,27 @@ function toCanonicalDirection(name) {
   return (name || '').toString().trim();
 }
 
+function isDateCell(c) {
+  return c && typeof c === 'object' && typeof c.getMonth === 'function';
+}
+
+function extractDayFromDate(dateCell) {
+  if (!isDateCell(dateCell)) return null;
+  var d = dateCell.getDate();
+  return (d >= 1 && d <= 31) ? d : null;
+}
+
 function extractDayNumber(val) {
   if (val == null || val === '') return null;
+  var d = extractDayFromDate(val);
+  if (d != null) return d;
   var n = parseInt(val, 10);
   if (!isNaN(n) && n >= 1 && n <= 31) return n;
   var s = (val || '').toString().trim();
   var m = s.match(/^(\d{1,2})[.\s]/) || s.match(/^(\d{1,2})$/);
   if (m) {
-    var d = parseInt(m[1], 10);
-    if (d >= 1 && d <= 31) return d;
+    var d2 = parseInt(m[1], 10);
+    if (d2 >= 1 && d2 <= 31) return d2;
   }
   return null;
 }
@@ -78,6 +90,14 @@ function isDayNamesRow(cells) {
   return matchCount >= Math.min(5, cells.length);
 }
 
+function isEmptyRow(row) {
+  if (!row || row.length === 0) return true;
+  for (var i = 0; i < row.length; i++) {
+    if (String(row[i] || '').trim()) return false;
+  }
+  return true;
+}
+
 function normalizeStatus(s) {
   var t = (s || '').toString().trim().toUpperCase();
   return VALID_STATUS.test(t) ? t : null;
@@ -89,76 +109,41 @@ function processSheetRows(rows) {
 
   while (i < rows.length) {
     var row = rows[i];
-    if (!row || row.length === 0) { i++; continue; }
+    if (isEmptyRow(row)) { i++; continue; }
 
-    var monthInfo = null;
-    for (var c = 0; c < row.length; c++) {
-      monthInfo = isMonthHeader(row[c]);
-      if (monthInfo) break;
-    }
-    if (i < 5) {
-      var fc = row[0];
-      Logger.log('DEBUG Row' + i + ' firstCell="' + (fc + '') + '" type=' + typeof fc + ' monthFound=' + !!monthInfo);
-      if (monthInfo) Logger.log('  -> month: ' + monthInfo.month + ' ' + monthInfo.year);
-    }
+    var monthInfo = isMonthHeader(row[0]);
     if (!monthInfo) { i++; continue; }
 
-    var year = monthInfo.year;
-    var monthNum = MONTH_NAMES.indexOf(monthInfo.month) + 1;
-    if (monthNum < 1) { i++; continue; }
-
-    i++;
-    if (i >= rows.length) break;
-
-    var daysRow = rows[i];
     var dayNumbers = [];
-    if (daysRow) {
-      for (var j = 0; j < daysRow.length; j++) {
-        var d = extractDayNumber(daysRow[j]);
-        if (d != null) dayNumbers.push(d);
-        else if (dayNumbers.length > 0) break;
-      }
-    }
-
-    if (dayNumbers.length === 0 && i + 1 < rows.length && isDayNamesRow(rows[i])) {
-      i++;
-      daysRow = rows[i];
-      if (daysRow) {
-        for (var j = 0; j < daysRow.length; j++) {
-          var d = extractDayNumber(daysRow[j]);
-          if (d != null) dayNumbers.push(d);
-          else if (dayNumbers.length > 0) break;
+    var year = null;
+    var monthNum = null;
+    for (var j = 1; j < row.length; j++) {
+      var d = extractDayFromDate(row[j]);
+      if (d != null) {
+        dayNumbers.push(d);
+        if (year == null && isDateCell(row[j])) {
+          year = row[j].getFullYear();
+          monthNum = row[j].getMonth() + 1;
         }
-      }
+      } else if (dayNumbers.length > 0) break;
     }
 
-    if (dayNumbers.length === 0) {
-      Logger.log('DEBUG: month found row' + (i - 1) + ', daysRow row' + i + ' dayNumbers=0 vals=' + JSON.stringify((daysRow || []).slice(0, 5)));
-      i++;
-      continue;
-    }
+    if (dayNumbers.length === 0 || year == null || monthNum == null) { i++; continue; }
+
     i++;
-
     if (i < rows.length && isDayNamesRow(rows[i])) i++;
 
     var dataRows = [];
     while (i < rows.length) {
       var r = rows[i];
+      if (isEmptyRow(r)) { i++; break; }
       if (!r || r.length < 2) { i++; break; }
 
-      var directionEnd = -1;
-      for (var k = 0; k < r.length; k++) {
-        if (normalizeStatus(r[k])) { directionEnd = k; break; }
-      }
-      if (directionEnd < 0) { i++; break; }
-
-      var dirParts = [];
-      for (var p = 0; p < directionEnd; p++) dirParts.push((r[p] || '').toString().trim());
-      var direction = dirParts.join(' ').trim();
+      var direction = (r[0] || '').toString().trim();
       if (!direction) { i++; continue; }
 
       var statusCells = [];
-      for (var s = directionEnd; s < r.length; s++) {
+      for (var s = 1; s < 1 + dayNumbers.length && s < r.length; s++) {
         var st = normalizeStatus(r[s]);
         if (st) statusCells.push(st);
       }
@@ -223,17 +208,6 @@ function runDeliverySync() {
 
   var allBlocks = [];
   var sheets = ss.getSheets();
-  if (sheets.length > 0) {
-    var values0 = sheets[0].getDataRange().getValues();
-    Logger.log('DEBUG: Sheet "' + sheets[0].getName() + '" rows=' + values0.length);
-    for (var r = 0; r < Math.min(8, values0.length); r++) {
-      var preview = values0[r].map(function(c) {
-        if (c && typeof c === 'object' && c.getMonth) return '[Date]';
-        return (c === null || c === undefined) ? '' : (c + '').substring(0, 30);
-      });
-      Logger.log('DEBUG Row' + r + ': ' + JSON.stringify(preview));
-    }
-  }
   for (var i = 0; i < sheets.length; i++) {
     var values = sheets[i].getDataRange().getValues();
     var blocks = processSheetRows(values);
