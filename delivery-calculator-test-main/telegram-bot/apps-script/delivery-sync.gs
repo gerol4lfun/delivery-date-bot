@@ -189,7 +189,7 @@ function runDeliverySync() {
   var url = props.getProperty('SYNC_URL');
   var secret = props.getProperty('SYNC_SECRET');
   var spreadsheetId = props.getProperty('SPREADSHEET_ID');
-  var dryRun = props.getProperty('DRY_RUN') !== 'false';
+  var dryRun = (props.getProperty('DRY_RUN') || '').toString().toLowerCase().trim() !== 'false';
 
   if (!url || !secret) {
     Logger.log('SYNC_URL or SYNC_SECRET not set in Script Properties');
