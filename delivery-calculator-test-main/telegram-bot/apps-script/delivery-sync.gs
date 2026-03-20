@@ -227,6 +227,8 @@ function runDeliverySync() {
   }
 
   var payload = JSON.stringify({ rows: rows, dry_run: dryRun });
+  Logger.log('DEBUG DRY_RUN raw=' + JSON.stringify(props.getProperty('DRY_RUN')) + ' computed=' + dryRun);
+  Logger.log('DEBUG payload=' + payload);
   var options = {
     method: 'post',
     contentType: 'application/json',
