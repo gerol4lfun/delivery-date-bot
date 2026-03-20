@@ -1,6 +1,10 @@
 # Telegram бот для обновления дат доставки
 
-Бот обновляет ограничения по датам доставки в Supabase на основе текста из Telegram. Используется только **Vercel + webhook**. Railway больше не используется.
+Бот обновляет ограничения по датам доставки в Supabase:
+1. **TG webhook** — текст из Telegram → парсинг → Supabase
+2. **Delivery sync** — Google Sheet поставщика → Apps Script → Vercel api/sync-delivery → Supabase delivery_calendar
+
+Используется только **Vercel + webhook**. Railway больше не используется.
 
 ---
 

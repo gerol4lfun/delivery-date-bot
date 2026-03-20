@@ -2,6 +2,8 @@
 
 **Главный документ по текущему устройству бота.** Обновляется при изменении runtime, storage или форматов.
 
+**Обновлено:** 2026-03-20 (doc-only finalization after delivery sync launch).
+
 ---
 
 ## Текущий runtime
@@ -9,14 +11,16 @@
 | Компонент | Значение |
 |-----------|----------|
 | **Платформа** | Vercel (serverless) |
-| **Режим** | Webhook |
-| **Точка входа** | `api/webhook.js` |
+| **Режим** | Webhook + Delivery sync |
+| **Точки входа** | `api/webhook.js`, `api/sync-delivery.js` |
 | **Root Directory** | `delivery-calculator-test-main/telegram-bot` |
 
 **Используется только Vercel + webhook.** Railway больше не используется. Polling (`index.js`) не используется на продакшене.
 
 **Рабочие файлы:**
-- `api/webhook.js` — Vercel handler, fetch к Supabase
+- `api/webhook.js` — Vercel handler (TG → Supabase)
+- `api/sync-delivery.js` — endpoint для Sheet→Apps Script sync
+- `apps-script/delivery-sync.gs` — runDeliverySync: читает Sheet, POST в api/sync-delivery
 - `parser.js` — parseDeliveryCalendar, parseDeliveryDates, канонизация направлений
 - `sql/delivery_calendar_setup.sql` — миграция таблицы delivery_calendar
 - `vercel.json`, `package.json`
@@ -27,10 +31,36 @@
 
 ## Поток данных
 
+### 1. TG webhook (ручная загрузка)
+
 1. Telegram → webhook POST → `api/webhook.js`
 2. `parseDeliveryCalendar(text)` или `parseDeliveryDates(text)` → `parser.js`
 3. `updateDeliveryCalendarFetch()` или `updateDeliveryDatesFetch()` → Supabase REST API
 4. Ответ пользователю в Telegram
+
+### 2. Delivery sync (Sheet → Supabase, автоматический)
+
+1. **Google Sheet поставщика** — календарь (месяцы, даты, направления, X/ДС/Д/С)
+2. **Apps Script** `runDeliverySync` — time-driven trigger каждые 4 ч, читает листы, формирует rows
+3. **POST** `api/sync-delivery` — X-Sync-Secret, body `{ rows, dry_run }`
+4. **Vercel** — при `DELIVERY_SYNC_APPLY=true` и `dry_run=false` → upsert в `delivery_calendar`
+5. **Калькулятор** — `loadDeliveryDate(cityName)` читает из Supabase
+
+---
+
+## Delivery sync: настройки
+
+**Apps Script (delivery-sync.gs) Script Properties:**
+- `SYNC_URL` — https://your-app.vercel.app/api/sync-delivery
+- `SYNC_SECRET` — секрет для заголовка X-Sync-Secret
+- `SPREADSHEET_ID` — ID таблицы поставщика
+- `DRY_RUN=false` — apply (при true — только логирование)
+
+**Time-driven trigger:** `runDeliverySync` — каждые 4 часа
+
+**Vercel env:**
+- `DELIVERY_SYNC_SECRET` — должен совпадать с SYNC_SECRET
+- `DELIVERY_SYNC_APPLY=true` — запись в Supabase включена (иначе dry-run)
 
 ---
 
@@ -67,6 +97,10 @@
 - X / Х → недоступно
 
 **Текущий статус загрузки:** март загружен; апрель и май планируются.
+
+**Подтверждено рабочим (20.03.2026):** sync Sheet→Apps Script→Vercel→Supabase работает; модалка дат в калькуляторе работает; новый заказ с датой и редактирование даты работают.
+
+**Не трогать без отдельного шага:** глобальные city mappings (DIRECTION_ALIAS), складские привязки, backend sync path (Apps Script, Vercel endpoint, Supabase schema).
 
 ---
 
