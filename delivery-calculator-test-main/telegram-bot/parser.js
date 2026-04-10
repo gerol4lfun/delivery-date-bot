@@ -2,13 +2,12 @@
  * Парсер текста для извлечения городов и дат доставки
  */
 
-const STATUS_MAP = {
-    'ДС': { available_without_assembly: true, available_with_assembly: true },
-    'Д': { available_without_assembly: true, available_with_assembly: false },
-    'С': { available_without_assembly: false, available_with_assembly: true },
-    'X': { available_without_assembly: false, available_with_assembly: false },
-    'Х': { available_without_assembly: false, available_with_assembly: false }
-};
+const {
+    STATUS_MAP,
+    isKnownStatus,
+    statusToFlags,
+    toCanonicalDirection
+} = require('./calendar-normalizer');
 
 const MONTH_NAMES = {
     'январь': 1, 'января': 1, 'февраль': 2, 'февраля': 2, 'март': 3, 'марта': 3,
@@ -16,37 +15,6 @@ const MONTH_NAMES = {
     'июль': 7, 'июля': 7, 'август': 8, 'августа': 8, 'сентябрь': 9, 'сентября': 9,
     'октябрь': 10, 'октября': 10, 'ноябрь': 11, 'ноября': 11, 'декабрь': 12, 'декабря': 12
 };
-
-const DIRECTION_ALIAS = {
-    'москва и мо': 'Москва и МО',
-    'москва и м.о.': 'Москва и МО',
-    'москва': 'Москва',
-    'санкт-петербург и обл.': 'Санкт-Петербург',
-    'санкт-петербург и ло': 'Санкт-Петербург',
-    'спб и ло': 'Санкт-Петербург',
-    'питер': 'Санкт-Петербург',
-    'петербург': 'Санкт-Петербург',
-    'спб': 'Санкт-Петербург',
-    'великий новгород': 'Великий Новгород',
-    'нижний новгород': 'Нижний Новгород',
-    'набережные челны': 'Набережные Челны',
-    'йошкар-ола': 'Йошкар-Ола',
-    'ростов-на-дону': 'Ростов-на-Дону'
-};
-
-function statusToFlags(raw) {
-    const s = (raw || '').trim().toUpperCase();
-    return STATUS_MAP[s] ?? { available_without_assembly: false, available_with_assembly: false };
-}
-
-function toCanonicalDirection(name) {
-    const lower = (name || '').trim().toLowerCase();
-    if (DIRECTION_ALIAS[lower]) return DIRECTION_ALIAS[lower];
-    for (const [key, val] of Object.entries(DIRECTION_ALIAS)) {
-        if (lower.includes(key) || key.includes(lower)) return val;
-    }
-    return normalizeCityName(name);
-}
 
 function ddMmToIsoDate(dd, mm, year) {
     const d = parseInt(dd, 10);
@@ -129,7 +97,7 @@ function parseDeliveryCalendarTable(lines) {
                 break;
             }
             const status = statusCells[j].toUpperCase();
-            if (!STATUS_MAP[status]) {
+            if (!isKnownStatus(status)) {
                 badRows.push({ direction, got: statusCells.length, expected: dayNumbers.length, msg: `неизвестный статус "${status}"` });
                 break;
             }
@@ -172,7 +140,7 @@ function parseDeliveryCalendarTextFallback(lines) {
         const canonical = toCanonicalDirection(direction);
         for (const p of pairs) {
             const iso = ddMmToIsoDate(p.dd, p.mm, currentYear);
-            if (iso && STATUS_MAP[p.status]) {
+            if (iso && isKnownStatus(p.status)) {
                 const flags = statusToFlags(p.status);
                 results.push({
                     city_name: canonical,

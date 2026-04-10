@@ -6,6 +6,7 @@
  */
 
 const { verifyDeliveryCalendarRows } = require('../verifier');
+const { normalizeDeliveryCalendarRows } = require('../calendar-normalizer');
 
 async function updateDeliveryCalendarFetch(rows) {
     const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
@@ -82,7 +83,7 @@ module.exports = async (req, res) => {
 
     const applyEnabled = process.env.DELIVERY_SYNC_APPLY === 'true';
     const dryRun = !applyEnabled || body.dry_run === true;
-    const rows = body.rows.filter(isValidRow);
+    const rows = normalizeDeliveryCalendarRows(body.rows.filter(isValidRow));
 
     if (rows.length === 0) {
         const msg = 'No valid rows (expected: city_name, delivery_date, available_without_assembly, available_with_assembly)';

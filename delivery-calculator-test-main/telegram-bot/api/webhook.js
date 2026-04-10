@@ -10,6 +10,8 @@ const {
     formatParsedResults,
     formatParsedCalendarResults
 } = require('../parser');
+const { verifyDeliveryCalendarRows } = require('../verifier');
+const { normalizeDeliveryCalendarRows } = require('../calendar-normalizer');
 
 let bot = null;
 
@@ -71,7 +73,8 @@ async function updateDeliveryCalendarFetch(rows) {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) throw new Error('SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не установлены');
 
-    const data = rows.map((r) => ({
+    const safeRows = normalizeDeliveryCalendarRows(rows);
+    const data = safeRows.map((r) => ({
         city_name: r.city_name,
         delivery_date: r.delivery_date,
         available_without_assembly: r.available_without_assembly,
@@ -94,13 +97,13 @@ async function updateDeliveryCalendarFetch(rows) {
     if (!res.ok) throw new Error(`Supabase: ${res.status} ${await res.text()}`);
 
     const byCity = {};
-    for (const r of rows) {
+    for (const r of safeRows) {
         byCity[r.city_name] = (byCity[r.city_name] || 0) + 1;
     }
     return {
         success: Object.entries(byCity).map(([city, count]) => ({ city, action: 'updated', date: `${count} дат` })),
         failed: [],
-        total: rows.length
+        total: safeRows.length
     };
 }
 
@@ -124,6 +127,7 @@ async function handleMessage(chatId, text, fromId) {
     const useCalendar = calendarParse.confident && calendarParse.rows.length > 0;
 
     if (useCalendar) {
+        const verifierResult = verifyDeliveryCalendarRows(calendarParse.rows);
         const preview = formatParsedCalendarResults(calendarParse.rows);
         await b.sendMessage(chatId, preview + '\n\n⏳ Обновляю календарь в Supabase...');
         try {
@@ -131,7 +135,8 @@ async function handleMessage(chatId, text, fromId) {
             console.log('[webhook] delivery_calendar upsert ok, rows:', results.total);
             const report = `✅ <b>Календарь обновлён!</b>\n\n📊 Записей: ${results.total}\n✅ Городов: ${results.success.length}\n`;
             const cities = results.success.slice(0, 10).map((s) => `• ${s.city} — ${s.date}`).join('\n');
-            await b.sendMessage(chatId, report + (cities ? '\n<b>Обновлено:</b>\n' + cities : ''), { parse_mode: 'HTML' });
+            const verifierBlock = '\n\n' + verifierResult.reportText;
+            await b.sendMessage(chatId, report + (cities ? '\n<b>Обновлено:</b>\n' + cities : '') + verifierBlock, { parse_mode: 'HTML' });
         } catch (err) {
             console.error('[webhook] delivery_calendar failed:', err.message);
             throw err;
