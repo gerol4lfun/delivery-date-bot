@@ -6,7 +6,7 @@
 const STATUS_MAP = {
     'ДС': { available_without_assembly: true, available_with_assembly: true },
     'Д': { available_without_assembly: true, available_with_assembly: false },
-    'С': { available_without_assembly: true, available_with_assembly: false },
+    'С': { available_without_assembly: false, available_with_assembly: true },
     'X': { available_without_assembly: false, available_with_assembly: false },
     'Х': { available_without_assembly: false, available_with_assembly: false }
 };
